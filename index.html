@@ -1,0 +1,1938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="坑多多：根据本地历史数据和多人共享反馈，简单预测当前厕所是否可能有空位。">
+  <title>坑多多｜厕所空位预测</title>
+
+  <style>
+    /*
+      本文件不依赖任何第三方样式或字体。
+      所有样式都在这里，直接双击 index.html 就能运行。
+    */
+    :root {
+      --bg: #f2f0e9;
+      --surface: #ffffff;
+      --surface-soft: #f8f7f2;
+      --ink: #17231f;
+      --muted: #66716c;
+      --line: #dcded7;
+      --brand: #163e34;
+      --brand-light: #dff1e7;
+      --good: #18704e;
+      --good-soft: #e1f4e9;
+      --wait: #9a6500;
+      --wait-soft: #fff1c9;
+      --full: #a33c2d;
+      --full-soft: #fde7e2;
+      --shadow: 0 16px 40px rgba(23, 35, 31, 0.08);
+      --radius-lg: 28px;
+      --radius-md: 20px;
+      --radius-sm: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: light;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 6%, rgba(250, 203, 85, 0.23), transparent 25rem),
+        radial-gradient(circle at 94% 16%, rgba(80, 149, 119, 0.18), transparent 28rem),
+        var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .page-shell {
+      width: min(1080px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 18px 0 24px;
+    }
+
+    .hero {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 32px;
+      overflow: hidden;
+      min-height: 112px;
+      padding: 22px 30px;
+      color: #f8fbf9;
+      background: var(--brand);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-brand {
+      position: relative;
+      z-index: 1;
+      flex: 0 0 auto;
+    }
+
+    .brand-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .environment-badge {
+      padding: 5px 8px;
+      color: #5d3d00;
+      background: #f4c95d;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .hero::before,
+    .hero::after {
+      position: absolute;
+      content: "";
+      border-radius: 999px;
+      pointer-events: none;
+    }
+
+    .hero::before {
+      top: -92px;
+      right: -54px;
+      width: 210px;
+      height: 210px;
+      background: rgba(255, 222, 129, 0.15);
+    }
+
+    .hero::after {
+      right: 116px;
+      bottom: -100px;
+      width: 170px;
+      height: 170px;
+      border: 32px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .eyebrow {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 7px;
+      color: #cfe5da;
+      font-size: 13px;
+      font-weight: 750;
+      letter-spacing: 0.16em;
+    }
+
+    .eyebrow::before {
+      width: 8px;
+      height: 8px;
+      content: "";
+      background: #f4c95d;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(244, 201, 93, 0.12);
+    }
+
+    .hero h1 {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      font-size: clamp(36px, 5vw, 50px);
+      font-weight: 900;
+      letter-spacing: -0.055em;
+      line-height: 0.98;
+    }
+
+    .hero-subtitle {
+      position: relative;
+      z-index: 1;
+      max-width: 430px;
+      margin: 0;
+      color: #d9e7e1;
+      font-size: clamp(14px, 1.7vw, 17px);
+      line-height: 1.55;
+      text-align: right;
+    }
+
+    .info-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 48px;
+      margin: 12px 0;
+      padding: 8px 12px 8px 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      border-radius: 15px;
+      box-shadow: 0 7px 22px rgba(23, 35, 31, 0.04);
+      backdrop-filter: blur(12px);
+    }
+
+    .context-line {
+      display: flex;
+      flex: 1 1 auto;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-width: 0;
+      color: #4f5d57;
+      font-size: 14px;
+      font-weight: 720;
+      line-height: 1.4;
+    }
+
+    .context-line strong {
+      color: var(--ink);
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 900;
+    }
+
+    .context-separator {
+      color: #a3aba6;
+      font-weight: 500;
+    }
+
+    .section-kicker,
+    .detail-label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      line-height: 1.4;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.7fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid rgba(220, 222, 215, 0.86);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .prediction-card {
+      overflow: hidden;
+    }
+
+    .prediction-top {
+      padding: clamp(22px, 3.2vw, 32px);
+      transition: background-color 180ms ease;
+    }
+
+    .prediction-card[data-state="available"] .prediction-top {
+      background: var(--good-soft);
+    }
+
+    .prediction-card[data-state="waiting"] .prediction-top {
+      background: var(--wait-soft);
+    }
+
+    .prediction-card[data-state="full"] .prediction-top {
+      background: var(--full-soft);
+    }
+
+    .prediction-heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .prediction-heading-row h2,
+    .side-card h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 850;
+      letter-spacing: -0.02em;
+    }
+
+    .status-dot {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.55);
+    }
+
+    .prediction-card[data-state="available"] .status-dot {
+      background: var(--good);
+    }
+
+    .prediction-card[data-state="waiting"] .status-dot {
+      background: var(--wait);
+    }
+
+    .prediction-card[data-state="full"] .status-dot {
+      background: var(--full);
+    }
+
+    .prediction-title {
+      max-width: 680px;
+      margin: 16px 0 8px;
+      font-size: clamp(36px, 5.2vw, 56px);
+      font-weight: 950;
+      letter-spacing: -0.07em;
+      line-height: 1.02;
+    }
+
+    .prediction-card[data-state="available"] .prediction-title {
+      color: var(--good);
+    }
+
+    .prediction-card[data-state="waiting"] .prediction-title {
+      color: var(--wait);
+    }
+
+    .prediction-card[data-state="full"] .prediction-title {
+      color: var(--full);
+    }
+
+    .prediction-suggestion {
+      margin: 0;
+      color: #37423e;
+      font-size: clamp(15px, 1.8vw, 18px);
+      line-height: 1.5;
+    }
+
+    .prediction-details {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-top: 1px solid var(--line);
+    }
+
+    .detail-block {
+      min-height: 78px;
+      padding: 14px 18px;
+      background: var(--surface);
+    }
+
+    .detail-value {
+      display: block;
+      margin-top: 6px;
+      color: var(--ink);
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: -0.035em;
+    }
+
+    .basis-details {
+      grid-column: 1 / -1;
+      color: #4f5d57;
+      background: var(--surface);
+    }
+
+    .basis-details summary {
+      display: flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 9px 18px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+      list-style: none;
+    }
+
+    .basis-details summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .basis-details summary::before {
+      margin-right: 7px;
+      content: "＋";
+      color: var(--brand);
+      font-size: 15px;
+    }
+
+    .basis-details[open] summary::before {
+      content: "－";
+    }
+
+    .basis-details[open] summary {
+      padding-bottom: 4px;
+    }
+
+    .detail-block.basis {
+      min-height: auto;
+      padding: 4px 18px 16px;
+    }
+
+    .basis-text {
+      margin: 0;
+      color: #4f5d57;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .side-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .side-card {
+      padding: 18px;
+    }
+
+    .side-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 13px;
+    }
+
+    .side-card-copy {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .feedback-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .feedback-button {
+      width: 100%;
+      min-height: 46px;
+      padding: 9px 7px;
+      color: var(--ink);
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 13px;
+      text-align: center;
+      transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease;
+    }
+
+    .feedback-button:hover {
+      z-index: 1;
+      background: #ffffff;
+      border-color: #8a958f;
+      transform: translateY(-1px);
+    }
+
+    .feedback-button:active {
+      transform: translateY(0);
+    }
+
+    .feedback-button:focus-visible {
+      outline: 3px solid rgba(22, 62, 52, 0.22);
+      outline-offset: 2px;
+    }
+
+    .feedback-button:disabled {
+      cursor: wait;
+      opacity: 0.62;
+      transform: none;
+    }
+
+    .feedback-button[data-feedback="accurate"]::before,
+    .feedback-button[data-feedback="actually_full"]::before,
+    .feedback-button[data-feedback="actually_available"]::before {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      margin-right: 5px;
+      border-radius: 8px;
+      font-size: 14px;
+      vertical-align: middle;
+    }
+
+    .feedback-button[data-feedback="accurate"]::before {
+      content: "✓";
+      color: var(--brand);
+      background: var(--brand-light);
+    }
+
+    .feedback-button[data-feedback="actually_full"]::before {
+      content: "×";
+      color: var(--full);
+      background: var(--full-soft);
+    }
+
+    .feedback-button[data-feedback="actually_available"]::before {
+      content: "○";
+      color: var(--good);
+      background: var(--good-soft);
+    }
+
+    .recent-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .recent-item {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr);
+      gap: 10px;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .recent-item:nth-child(n + 6) {
+      display: none;
+    }
+
+    .recent-item:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .recent-time {
+      color: var(--muted);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 750;
+    }
+
+    .recent-feedback {
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .feedback-source {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+
+    .connection-status {
+      flex: 0 1 auto;
+      margin: 0;
+      padding: 6px 10px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-align: right;
+    }
+
+    .connection-status[data-state="success"] {
+      color: var(--good);
+      background: var(--good-soft);
+    }
+
+    .connection-status[data-state="warning"] {
+      color: var(--wait);
+      background: var(--wait-soft);
+    }
+
+    .empty-state {
+      margin: 0;
+      padding: 10px 12px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      border: 0;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.45;
+    }
+
+    .footer-note {
+      margin: 12px 0 0;
+      color: #75807a;
+      font-size: 11px;
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 10;
+      left: 50%;
+      bottom: 26px;
+      max-width: calc(100% - 32px);
+      padding: 13px 18px;
+      color: #ffffff;
+      background: #17231f;
+      border-radius: 999px;
+      box-shadow: 0 12px 30px rgba(23, 35, 31, 0.22);
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 18px);
+      transition: opacity 180ms ease, transform 180ms ease;
+      font-size: 14px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    @media (max-width: 820px) {
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .side-stack {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page-shell {
+        width: min(100% - 12px, 1080px);
+        padding: 6px 0 12px;
+      }
+
+      .hero,
+      .card {
+        border-radius: 17px;
+      }
+
+      .hero {
+        display: block;
+        min-height: 82px;
+        padding: 13px 16px;
+      }
+
+      .hero::before,
+      .hero::after {
+        display: none;
+      }
+
+      .eyebrow {
+        display: none;
+      }
+
+      .hero h1 {
+        font-size: 30px;
+        line-height: 1;
+      }
+
+      .environment-badge {
+        padding: 4px 7px;
+        font-size: 10px;
+      }
+
+      .hero-subtitle {
+        margin-top: 5px;
+        font-size: 13px;
+        line-height: 1.35;
+        text-align: left;
+      }
+
+      .info-strip {
+        gap: 8px;
+        min-height: 38px;
+        margin: 6px 0 8px;
+        padding: 6px 8px 6px 10px;
+        border-radius: 12px;
+      }
+
+      .context-line {
+        flex-wrap: nowrap;
+        gap: 4px;
+        overflow: hidden;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .context-line strong {
+        font-size: 14px;
+      }
+
+      .context-line span:last-child {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .connection-status {
+        max-width: 42%;
+        padding: 4px 7px;
+        overflow: hidden;
+        font-size: 10px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .content-grid,
+      .side-stack {
+        gap: 8px;
+      }
+
+      .side-stack {
+        grid-template-columns: 1fr;
+      }
+
+      .prediction-top {
+        padding: 15px;
+      }
+
+      .prediction-heading-row h2 {
+        font-size: 13px;
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.55);
+      }
+
+      .prediction-title {
+        margin: 9px 0 5px;
+        font-size: clamp(32px, 10vw, 40px);
+        letter-spacing: -0.055em;
+      }
+
+      .prediction-suggestion {
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .detail-block {
+        min-height: 62px;
+        padding: 10px 12px;
+      }
+
+      .detail-label {
+        font-size: 10px;
+      }
+
+      .detail-value {
+        margin-top: 4px;
+        font-size: 17px;
+      }
+
+      .basis-details summary {
+        min-height: 36px;
+        padding: 7px 12px;
+        font-size: 12px;
+      }
+
+      .detail-block.basis {
+        min-height: auto;
+        padding: 2px 12px 12px;
+      }
+
+      .side-card {
+        padding: 13px;
+      }
+
+      .side-card-header {
+        margin-bottom: 9px;
+      }
+
+      .side-card h2 {
+        font-size: 14px;
+      }
+
+      .side-card-copy {
+        display: none;
+      }
+
+      .feedback-buttons {
+        gap: 6px;
+      }
+
+      .feedback-button {
+        min-height: 44px;
+        padding: 7px 3px;
+        font-size: 12px;
+      }
+
+      .feedback-button[data-feedback]::before {
+        width: 20px;
+        height: 20px;
+        margin-right: 3px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
+      .recent-item {
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 7px;
+        padding: 6px 0;
+      }
+
+      .recent-item:nth-child(n + 4) {
+        display: none;
+      }
+
+      .recent-time,
+      .recent-feedback {
+        font-size: 12px;
+      }
+
+      .feedback-source {
+        margin-top: 1px;
+        font-size: 10px;
+      }
+
+      .empty-state {
+        padding: 6px 2px;
+        background: transparent;
+        font-size: 12px;
+      }
+
+      .footer-note {
+        margin-top: 7px;
+        padding: 0 8px;
+        font-size: 9px;
+      }
+
+      .toast {
+        bottom: 14px;
+        padding: 11px 15px;
+        font-size: 13px;
+      }
+
+      .side-card,
+      .detail-block {
+        overflow-wrap: anywhere;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-brand">
+        <p class="eyebrow">OFFICE PIT STOP</p>
+        <div class="brand-title-row">
+          <h1>坑多多</h1>
+          <span class="environment-badge" id="environmentBadge" hidden>测试模式</span>
+        </div>
+      </div>
+      <p class="hero-subtitle">预测一下，现在去厕所会不会扑空。</p>
+    </header>
+
+    <main>
+      <section class="info-strip" aria-label="当前信息">
+        <div class="context-line">
+          <strong id="currentTime">--:--</strong>
+          <span class="context-separator" aria-hidden="true">·</span>
+          <span id="currentWeekday">--</span>
+          <span class="context-separator" aria-hidden="true">·</span>
+          <span id="toiletName">本层厕所</span>
+        </div>
+        <p class="connection-status" id="connectionStatus" data-state="loading" role="status" aria-live="polite">正在连接共享反馈…</p>
+      </section>
+
+      <section class="content-grid" aria-label="预测与反馈">
+        <article class="card prediction-card" id="predictionCard" data-state="waiting">
+          <div class="prediction-top">
+            <div class="prediction-heading-row">
+              <h2>当前预测</h2>
+              <span class="status-dot" aria-hidden="true"></span>
+            </div>
+            <p class="prediction-title" id="predictionTitle">正在计算…</p>
+            <p class="prediction-suggestion" id="predictionSuggestion">请稍候。</p>
+          </div>
+
+          <div class="prediction-details">
+            <div class="detail-block">
+              <span class="detail-label">预计等待时间</span>
+              <strong class="detail-value" id="waitingTime">--</strong>
+            </div>
+            <div class="detail-block">
+              <span class="detail-label">置信度</span>
+              <strong class="detail-value" id="confidence">--</strong>
+            </div>
+            <details class="basis-details">
+              <summary>查看预测依据</summary>
+              <div class="detail-block basis">
+                <p class="basis-text" id="predictionBasis">正在读取历史数据和最近反馈。</p>
+              </div>
+            </details>
+          </div>
+        </article>
+
+        <div class="side-stack">
+          <article class="card side-card">
+            <div class="side-card-header">
+              <div>
+                <h2>结果怎么样？</h2>
+                <p class="side-card-copy">点一下，帮下次判断更靠谱。</p>
+              </div>
+            </div>
+            <div class="feedback-buttons" aria-label="预测反馈">
+              <button class="feedback-button" type="button" data-feedback="accurate">预测准</button>
+              <button class="feedback-button" type="button" data-feedback="actually_full" aria-label="实际没空位">没空位</button>
+              <button class="feedback-button" type="button" data-feedback="actually_available" aria-label="实际有空位">有空位</button>
+            </div>
+          </article>
+
+          <article class="card side-card">
+            <div class="side-card-header">
+              <div>
+                <h2>最近反馈</h2>
+                <p class="side-card-copy">桌面最多 5 条，手机最多 3 条。</p>
+              </div>
+            </div>
+            <div id="recentFeedbackContainer">
+              <p class="empty-state">暂无共享反馈</p>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <p class="footer-note">V1 多人共享反馈版 · Supabase 为主数据源 · localStorage 提供本地兜底</p>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">反馈已记录</div>
+
+  <script>
+    "use strict";
+
+    // =====================================================================
+    // ===== 可配置区域：环境、厕所、Supabase、预测参数都集中在这里 =====
+    // =====================================================================
+    const appConfig = {
+      defaultEnv: "production",
+      envs: {
+        production: {
+          environment: "production",
+          toiletId: "office-floor-toilet-001",
+          toiletName: "本层厕所"
+        },
+        test: {
+          environment: "test",
+          toiletId: "test-toilet-001",
+          toiletName: "测试厕所"
+        }
+      }
+    };
+
+    // environment 只是同一项目中的数据标签：只有 ?env=test 进入测试模式，
+    // 其他情况全部使用默认 production，不提供复杂的环境切换机制。
+    const environmentParam = new URLSearchParams(window.location.search).get("env");
+    const currentEnvironment = environmentParam === "test"
+      ? "test"
+      : appConfig.defaultEnv;
+    const activeEnvironmentConfig = appConfig.envs[currentEnvironment];
+    const toiletConfig = {
+      id: activeEnvironmentConfig.toiletId,
+      name: activeEnvironmentConfig.toiletName,
+      location: "",
+      environment: activeEnvironmentConfig.environment
+    };
+
+    // 这里只能填写 Supabase Project URL 和 publishable key / anon public key。
+    // 绝对不要填写 secret key、service_role key 或数据库密码。
+    // URL 或 key 留空时，页面会自动进入 localStorage 本地兜底模式。
+    const supabaseConfig = {
+      url: "https://ngmiokexkukwqtdqwitg.supabase.co",
+      key: "sb_publishable_rYVNDAqs3urRTvz0pD_pSg_GRcuzjrc"
+    };
+
+    const predictionConfig = {
+      nearbyMinutes: 60,
+      strongFeedbackMinutes: 5,
+      feedbackEffectMinutes: 10,
+      maxRecentFeedbackCount: 10,
+      maxObservationCount: 1000,
+      duplicateSubmitCooldownSeconds: 3
+    };
+
+    // =====================================================================
+    // ===== 本地兜底历史数据：Supabase 无数据或读取失败时才使用 =====
+    // =====================================================================
+    // 正常情况下，预测优先读取 Supabase 的 toilet_observations 表。
+    // 下面的数据仅用于离线或空表兜底，不再是主要历史数据源。
+    // 每条数据都要保留这 6 个字段：
+    // date            日期，格式必须是 YYYY-MM-DD，例如 "2026-06-29"
+    // weekday         中文工作日，例如 "周一"
+    // time            24 小时时间，格式必须是 HH:mm，例如 "10:30"
+    // vacancy         空位数，填写 0 或正数
+    // waitingPeople   等待人数，填写 0 或正数
+    // waitingMinutes  等待分钟数，填写 0 或正数
+    // 如果某一条缺字段、格式错误或数字小于 0，程序会自动忽略它，不会让页面报错。
+    const fallbackHistoryData = [
+      { date: "2026-06-15", weekday: "周一", time: "15:11", vacancy: 4, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-16", weekday: "周二", time: "14:28", vacancy: 0, waitingPeople: 0, waitingMinutes: 1 },
+      { date: "2026-06-16", weekday: "周二", time: "17:01", vacancy: 0, waitingPeople: 3, waitingMinutes: 3 },
+      { date: "2026-06-16", weekday: "周二", time: "17:07", vacancy: 2, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-17", weekday: "周三", time: "13:57", vacancy: 2, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-17", weekday: "周三", time: "16:21", vacancy: 0, waitingPeople: 0, waitingMinutes: 5 },
+      { date: "2026-06-24", weekday: "周三", time: "15:27", vacancy: 2, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-24", weekday: "周三", time: "16:24", vacancy: 2, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-24", weekday: "周三", time: "17:30", vacancy:3, waitingPeople: 1, waitingMinutes: 0 },
+      { date: "2026-06-24", weekday: "周三", time: "18:20", vacancy:0, waitingPeople: 0, waitingMinutes: 1 },
+      { date: "2026-06-25", weekday: "周四", time: "17:05", vacancy: 0, waitingPeople: 0, waitingMinutes: 3 },
+      { date: "2026-06-29", weekday: "周一", time: "13:34", vacancy: 2, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-29", weekday: "周一", time: "16:04", vacancy: 3, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-30", weekday: "周二", time: "14:07", vacancy: 2, waitingPeople: 0, waitingMinutes: 0 },
+      { date: "2026-06-30", weekday: "周二", time: "15:38", vacancy: 0, waitingPeople: 0, waitingMinutes: 2 },
+    ];
+
+    // 同工作日相近数据达到 2 条时只使用同工作日数据；不足 2 条时，
+    // 按需求回退到全部工作日的相近时间数据。想调整门槛可修改这里。
+    const MIN_SAME_WEEKDAY_SAMPLES = 2;
+
+    const FEEDBACK_TABLE = "toilet_feedback";
+    const OBSERVATION_TABLE = "toilet_observations";
+    const STORAGE_KEYS = {
+      remoteCache: "kengduoduo_remote_feedback_cache_v1",
+      localFallback: "kengduoduo_local_fallback_feedback_v1",
+      legacyFeedback: "kengduoduo_feedback_records_v1",
+      clientId: "kengduoduo_client_id_v1",
+      lastSubmitAt: "kengduoduo_last_submit_at_v1"
+    };
+
+    // 三档预测从“谨慎”到“乐观”的固定顺序，反馈修正时会用到。
+    const PREDICTION_LEVELS = ["大概率满员", "可能需要等待", "大概率有空位"];
+    const FEEDBACK_LABELS = {
+      accurate: "预测准",
+      actually_full: "实际没空位",
+      actually_available: "实际有空位"
+    };
+    const LEGACY_FEEDBACK_VALUES = {
+      "预测准": "accurate",
+      "实际没空位": "actually_full",
+      "实际有空位": "actually_available"
+    };
+
+    // 每个预测档位对应的等待时间、建议和视觉状态。
+    const PREDICTION_PRESENTATION = {
+      "大概率有空位": {
+        waitingTime: "0-2 分钟",
+        suggestion: "现在去应该比较稳。",
+        state: "available"
+      },
+      "可能需要等待": {
+        waitingTime: "2-5 分钟",
+        suggestion: "可以稍等几分钟再去。",
+        state: "waiting"
+      },
+      "大概率满员": {
+        waitingTime: "5 分钟以上",
+        suggestion: "建议等一会儿，或者换个厕所。",
+        state: "full"
+      }
+    };
+
+    let supabaseClient = null;
+    let currentPrediction = null;
+    let historyRecords = fallbackHistoryData;
+    let historyMode = "fallback";
+    let feedbackRecords = [];
+    let feedbackMode = "local";
+    let isSubmitting = false;
+    let lastSubmitAtMemory = 0;
+    let toastTimer = null;
+
+    // 获取当前时间信息：包括 Date 对象、HH:mm 时间和中文工作日。
+    function getCurrentTimeInfo() {
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, "0");
+      const minutes = String(now.getMinutes()).padStart(2, "0");
+      const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+      return {
+        now,
+        time: `${hours}:${minutes}`,
+        weekday: weekdays[now.getDay()]
+      };
+    }
+
+    function getFullToiletName() {
+      return [toiletConfig.location, toiletConfig.name]
+        .filter(value => typeof value === "string" && value.trim())
+        .join(" ") || "本层厕所";
+    }
+
+    // 将 HH:mm 转换成从 00:00 开始的分钟数，方便比较时间。
+    // 格式错误时返回 null，让后续逻辑安全地忽略这条数据。
+    function timeToMinutes(timeString) {
+      if (typeof timeString !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeString)) {
+        return null;
+      }
+
+      const [hours, minutes] = timeString.split(":").map(Number);
+      return hours * 60 + minutes;
+    }
+
+    // 检查一条历史数据是否完整、格式是否正确。
+    function isValidHistoryRecord(record) {
+      if (!record || typeof record !== "object") {
+        return false;
+      }
+
+      const validDate = typeof record.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(record.date);
+      const validWeekday = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"].includes(record.weekday);
+      const validTime = timeToMinutes(record.time) !== null;
+      const numberFields = [record.vacancy, record.waitingPeople, record.waitingMinutes];
+      const validNumbers = numberFields.every(value => typeof value === "number" && Number.isFinite(value) && value >= 0);
+
+      return validDate && validWeekday && validTime && validNumbers;
+    }
+
+    // 获取相近时间段的历史数据。
+    // 先找当前时间前后 60 分钟内的数据；同工作日达到指定数量时优先使用，
+    // 否则回退到全部工作日的相近时间数据。
+    function getMatchedHistoryData(currentInfo, dataSource = historyRecords) {
+      const currentMinutes = timeToMinutes(currentInfo.time);
+      const validHistory = dataSource.filter(isValidHistoryRecord);
+
+      const nearbyRecords = validHistory.filter(record => {
+        const recordMinutes = timeToMinutes(record.time);
+        return Math.abs(recordMinutes - currentMinutes) <= predictionConfig.nearbyMinutes;
+      });
+
+      const sameWeekdayRecords = nearbyRecords.filter(record => record.weekday === currentInfo.weekday);
+
+      if (sameWeekdayRecords.length >= MIN_SAME_WEEKDAY_SAMPLES) {
+        return {
+          records: sameWeekdayRecords,
+          mode: "same-weekday",
+          source: historyMode,
+          ignoredCount: dataSource.length - validHistory.length
+        };
+      }
+
+      return {
+        records: nearbyRecords,
+        mode: nearbyRecords.length ? "all-weekdays" : "none",
+        source: historyMode,
+        ignoredCount: dataSource.length - validHistory.length
+      };
+    }
+
+    // localStorage 在 V1 中只负责缓存、失败暂存、防重复点击和匿名 client_id。
+    function readStorageArray(key) {
+      try {
+        const savedText = localStorage.getItem(key);
+        if (!savedText) {
+          return [];
+        }
+        const parsedRecords = JSON.parse(savedText);
+        return Array.isArray(parsedRecords) ? parsedRecords : [];
+      } catch (error) {
+        console.warn("读取本地缓存失败，已按空数据处理：", error);
+        return [];
+      }
+    }
+
+    function writeStorageValue(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch (error) {
+        console.warn("写入本地缓存失败：", error);
+        return false;
+      }
+    }
+
+    function getScopedStorageKey(baseKey) {
+      return `${baseKey}_${toiletConfig.environment}_${toiletConfig.id}`;
+    }
+
+    function normalizeFeedbackRecord(record, storage = "remote") {
+      if (!record || typeof record !== "object") {
+        return null;
+      }
+
+      const feedbackValue = LEGACY_FEEDBACK_VALUES[record.feedback] || record.feedback;
+      const createdAt = record.created_at || record.createdAt;
+      const createdTime = new Date(createdAt).getTime();
+      if (!FEEDBACK_LABELS[feedbackValue] || !Number.isFinite(createdTime)) {
+        return null;
+      }
+
+      return {
+        id: typeof record.id === "string" ? record.id : "",
+        createdAt: new Date(createdTime).toISOString(),
+        toiletId: record.toilet_id || record.toiletId || toiletConfig.id,
+        toiletName: record.toilet_name || record.toiletName || getFullToiletName(),
+        environment: record.environment || toiletConfig.environment,
+        weekday: typeof record.weekday === "string" ? record.weekday : "--",
+        time: record.time_text || record.time || "--:--",
+        prediction: PREDICTION_LEVELS.includes(record.prediction) ? record.prediction : "可能需要等待",
+        feedback: feedbackValue,
+        source: typeof record.source === "string" ? record.source : "web_v1",
+        clientId: record.client_id || record.clientId || "",
+        storage
+      };
+    }
+
+    function mergeFeedbackRecords(...recordGroups) {
+      const merged = [];
+      const seen = new Set();
+
+      recordGroups.flat().forEach(record => {
+        const normalized = normalizeFeedbackRecord(record, record.storage || "local");
+        if (!normalized) {
+          return;
+        }
+
+        const uniqueKey = normalized.id || [
+          normalized.clientId,
+          normalized.createdAt,
+          normalized.feedback
+        ].join("|");
+
+        if (!seen.has(uniqueKey)) {
+          seen.add(uniqueKey);
+          merged.push(normalized);
+        }
+      });
+
+      return merged
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 50);
+    }
+
+    function getCachedFeedback() {
+      const currentCache = readStorageArray(getScopedStorageKey(STORAGE_KEYS.remoteCache));
+      const legacyCache = toiletConfig.environment === "production"
+        ? readStorageArray(STORAGE_KEYS.remoteCache)
+        : [];
+      return mergeFeedbackRecords(currentCache, legacyCache)
+        .map(record => normalizeFeedbackRecord(record, "cache"))
+        .filter(record => record
+          && record.environment === toiletConfig.environment
+          && record.toiletId === toiletConfig.id);
+    }
+
+    function cacheFeedback(records) {
+      const safeRecords = records
+        .map(record => normalizeFeedbackRecord(record, "cache"))
+        .filter(Boolean)
+        .slice(0, predictionConfig.maxRecentFeedbackCount);
+      return writeStorageValue(getScopedStorageKey(STORAGE_KEYS.remoteCache), safeRecords);
+    }
+
+    function getLocalFallbackFeedback() {
+      const currentFallback = readStorageArray(getScopedStorageKey(STORAGE_KEYS.localFallback));
+      const legacyFallback = toiletConfig.environment === "production"
+        ? readStorageArray(STORAGE_KEYS.localFallback)
+        : [];
+      return mergeFeedbackRecords(currentFallback, legacyFallback)
+        .map(record => normalizeFeedbackRecord(record, "pending"))
+        .filter(record => record
+          && record.environment === toiletConfig.environment
+          && record.toiletId === toiletConfig.id);
+    }
+
+    // ===== Supabase 提交失败时，反馈就在这个函数里暂存到 localStorage。 =====
+    function saveLocalFallbackFeedback(record) {
+      const normalized = normalizeFeedbackRecord(record, "pending");
+      if (!normalized) {
+        return false;
+      }
+      return writeStorageValue(
+        getScopedStorageKey(STORAGE_KEYS.localFallback),
+        mergeFeedbackRecords(normalized, getLocalFallbackFeedback()).slice(0, 50)
+      );
+    }
+
+    function getLegacyFeedback() {
+      if (toiletConfig.environment !== "production") {
+        return [];
+      }
+      return readStorageArray(STORAGE_KEYS.legacyFeedback)
+        .map(record => normalizeFeedbackRecord(record, "legacy"))
+        .filter(Boolean);
+    }
+
+    function getFallbackFeedback() {
+      return mergeFeedbackRecords(
+        getLocalFallbackFeedback(),
+        getCachedFeedback(),
+        getLegacyFeedback()
+      );
+    }
+
+    function getOrCreateClientId() {
+      try {
+        const savedId = localStorage.getItem(STORAGE_KEYS.clientId);
+        if (savedId) {
+          return savedId;
+        }
+
+        const generatedId = window.crypto && typeof window.crypto.randomUUID === "function"
+          ? window.crypto.randomUUID()
+          : `client-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        localStorage.setItem(STORAGE_KEYS.clientId, generatedId);
+        return generatedId;
+      } catch (error) {
+        console.warn("无法保存本地 client_id，将使用临时标识：", error);
+        return `temporary-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      }
+    }
+
+    // 使用浏览器原生 fetch 调用 Supabase REST API，保持单文件和原生技术栈。
+    function initSupabaseClient() {
+      const url = typeof supabaseConfig.url === "string" ? supabaseConfig.url.trim() : "";
+      const key = typeof supabaseConfig.key === "string" ? supabaseConfig.key.trim() : "";
+      if (!url || !key) {
+        return null;
+      }
+
+      try {
+        const parsedUrl = new URL(url);
+        return {
+          restUrl: `${parsedUrl.origin}/rest/v1`,
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`,
+            Accept: "application/json"
+          }
+        };
+      } catch (error) {
+        console.error("Supabase Project URL 格式不正确：", error);
+        return null;
+      }
+    }
+
+    async function fetchWithTimeout(url, options = {}) {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    }
+
+    async function createSupabaseError(response) {
+      let details = "";
+      try {
+        details = await response.text();
+      } catch (error) {
+        details = "无法读取错误详情";
+      }
+
+      const requestError = new Error(`Supabase 请求失败（HTTP ${response.status}）：${details}`);
+      requestError.status = response.status;
+      requestError.details = details;
+      return requestError;
+    }
+
+    function normalizeObservationRecord(record) {
+      if (!record || typeof record !== "object") {
+        return null;
+      }
+
+      const normalized = {
+        date: record.observed_date || record.date,
+        weekday: record.weekday,
+        time: record.time_text || record.time,
+        vacancy: Number(record.vacancy),
+        waitingPeople: Number(record.waiting_people ?? record.waitingPeople),
+        waitingMinutes: Number(record.waiting_minutes ?? record.waitingMinutes)
+      };
+      return isValidHistoryRecord(normalized) ? normalized : null;
+    }
+
+    async function fetchRemoteObservations() {
+      if (!supabaseClient) {
+        throw new Error("Supabase 尚未配置");
+      }
+
+      const params = new URLSearchParams({
+        select: "observed_date,weekday,time_text,vacancy,waiting_people,waiting_minutes,toilet_id,toilet_name,environment",
+        environment: `eq.${toiletConfig.environment}`,
+        toilet_id: `eq.${toiletConfig.id}`,
+        order: "observed_date.asc,time_text.asc",
+        limit: String(predictionConfig.maxObservationCount)
+      });
+      const response = await fetchWithTimeout(
+        `${supabaseClient.restUrl}/${OBSERVATION_TABLE}?${params.toString()}`,
+        { headers: supabaseClient.headers }
+      );
+
+      if (!response.ok) {
+        throw await createSupabaseError(response);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data)
+        ? data.map(normalizeObservationRecord).filter(Boolean)
+        : [];
+    }
+
+    async function fetchRemoteFeedback() {
+      if (!supabaseClient) {
+        throw new Error("Supabase 尚未配置");
+      }
+
+      const params = new URLSearchParams({
+        select: "id,created_at,toilet_id,toilet_name,environment,weekday,time_text,prediction,feedback,source,client_id",
+        environment: `eq.${toiletConfig.environment}`,
+        toilet_id: `eq.${toiletConfig.id}`,
+        order: "created_at.desc",
+        limit: String(predictionConfig.maxRecentFeedbackCount)
+      });
+      const response = await fetchWithTimeout(
+        `${supabaseClient.restUrl}/${FEEDBACK_TABLE}?${params.toString()}`,
+        { headers: supabaseClient.headers }
+      );
+
+      if (!response.ok) {
+        throw await createSupabaseError(response);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data)
+        ? data.map(record => normalizeFeedbackRecord(record, "remote")).filter(Boolean)
+        : [];
+    }
+
+    async function submitRemoteFeedback(feedbackRecord) {
+      if (!supabaseClient) {
+        throw new Error("Supabase 尚未配置");
+      }
+
+      const payload = {
+        environment: feedbackRecord.environment,
+        toilet_id: feedbackRecord.toiletId,
+        toilet_name: feedbackRecord.toiletName,
+        weekday: feedbackRecord.weekday,
+        time_text: feedbackRecord.time,
+        prediction: feedbackRecord.prediction,
+        feedback: feedbackRecord.feedback,
+        source: "web_v1",
+        client_id: feedbackRecord.clientId,
+        user_agent: navigator.userAgent
+      };
+      const response = await fetchWithTimeout(
+        `${supabaseClient.restUrl}/${FEEDBACK_TABLE}`,
+        {
+          method: "POST",
+          headers: {
+            ...supabaseClient.headers,
+            "Content-Type": "application/json",
+            Prefer: "return=representation"
+          },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if (!response.ok) {
+        throw await createSupabaseError(response);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) && data[0]
+        ? normalizeFeedbackRecord(data[0], "remote")
+        : normalizeFeedbackRecord(feedbackRecord, "remote");
+    }
+
+    // 为某个预测结论补齐等待时间、建议和视觉状态。
+    function applyPredictionPresentation(prediction) {
+      const presentation = PREDICTION_PRESENTATION[prediction.level];
+      return {
+        ...prediction,
+        waitingTime: presentation.waitingTime,
+        suggestion: presentation.suggestion,
+        state: presentation.state
+      };
+    }
+
+    // =====================================================================
+    // ===== 预测规则在这里：根据历史数据计算基础预测 =====
+    // =====================================================================
+    // 后续想调整预测规则，优先修改这个函数中的三个判断条件。
+    // 注意：文档中的“平均空位数 = 0”与“可能需要等待”的条件会重叠，
+    // 因此先判断“大概率满员”，再判断“大概率有空位”，其余归为“可能需要等待”。
+    function calculateBasePrediction(matchResult) {
+      const records = matchResult.records;
+
+      if (records.length === 0) {
+        return applyPredictionPresentation({
+          level: "可能需要等待",
+          confidence: "低",
+          basis: "当前历史数据不足，暂时使用默认预测，结果仅供参考。",
+          matchedCount: 0
+        });
+      }
+
+      const totals = records.reduce((sum, record) => {
+        sum.vacancy += record.vacancy;
+        sum.waitingPeople += record.waitingPeople;
+        sum.waitingMinutes += record.waitingMinutes;
+        return sum;
+      }, { vacancy: 0, waitingPeople: 0, waitingMinutes: 0 });
+
+      const averageVacancy = totals.vacancy / records.length;
+      const averageWaitingPeople = totals.waitingPeople / records.length;
+      const averageWaitingMinutes = totals.waitingMinutes / records.length;
+
+      let level;
+
+      // 情况三：空位为 0，或等待人数至少 3 人，或等待超过 5 分钟。
+      if (averageVacancy === 0 || averageWaitingPeople >= 3 || averageWaitingMinutes > 5) {
+        level = "大概率满员";
+      // 情况一：平均至少 1 个空位、等待不超过 1 人、等待不超过 2 分钟。
+      } else if (averageVacancy >= 1 && averageWaitingPeople <= 1 && averageWaitingMinutes <= 2) {
+        level = "大概率有空位";
+      // 情况二及没有完全命中上述边界的中间情况：采用中性预测。
+      } else {
+        level = "可能需要等待";
+      }
+
+      // 置信度的简单规则：1 条为低，2-4 条为中，5 条及以上为高。
+      const confidence = records.length >= 5 ? "高" : records.length >= 2 ? "中" : "低";
+      const historySourceText = matchResult.source === "remote"
+        ? "Supabase 历史观测表中"
+        : "本地兜底数据中";
+      const sourceText = matchResult.mode === "same-weekday"
+        ? `同一工作日相近时段的 ${records.length} 条历史记录`
+        : `全部工作日相近时段的 ${records.length} 条历史记录`;
+      const averageText = `平均空位 ${formatAverage(averageVacancy)} 个、平均等待 ${formatAverage(averageWaitingPeople)} 人 / ${formatAverage(averageWaitingMinutes)} 分钟`;
+      const ignoredText = matchResult.ignoredCount > 0
+        ? `；已忽略 ${matchResult.ignoredCount} 条格式不完整的数据`
+        : "";
+
+      return applyPredictionPresentation({
+        level,
+        confidence,
+        basis: `根据${historySourceText}${sourceText}判断：${averageText}${ignoredText}。`,
+        matchedCount: records.length
+      });
+    }
+
+    // 平均数最多显示 1 位小数，整数不显示多余的 .0。
+    function formatAverage(number) {
+      return Number.isInteger(number) ? String(number) : number.toFixed(1);
+    }
+
+    // =====================================================================
+    // ===== 最近反馈修正规则在这里 =====
+    // =====================================================================
+    // 后续想改“共享反馈如何影响预测”，修改这个函数即可。
+    function adjustPredictionByRemoteFeedback(basePrediction, records, now) {
+      const strongMilliseconds = predictionConfig.strongFeedbackMinutes * 60 * 1000;
+      const effectMilliseconds = predictionConfig.feedbackEffectMinutes * 60 * 1000;
+      const recentRecords = records.filter(record => {
+        const createdTime = new Date(record.createdAt).getTime();
+        const age = now.getTime() - createdTime;
+        return Number.isFinite(createdTime) && age >= 0 && age <= effectMilliseconds;
+      });
+
+      if (recentRecords.length === 0) {
+        return applyPredictionPresentation({
+          ...basePrediction,
+          basis: `${basePrediction.basis} 当前暂无共享反馈，预测主要基于历史记录。`
+        });
+      }
+
+      const strongRecords = recentRecords.filter(record => {
+        const age = now.getTime() - new Date(record.createdAt).getTime();
+        return age <= strongMilliseconds;
+      });
+      const fullCount = strongRecords.filter(record => record.feedback === "actually_full").length;
+      const availableCount = strongRecords.filter(record => record.feedback === "actually_available").length;
+      const accurateCount = recentRecords.filter(record => record.feedback === "accurate").length;
+      const nonAccurateCount = recentRecords.length - accurateCount;
+
+      // 规则四：5 分钟内反馈冲突时统一调整为中性预测，置信度设为低。
+      if (fullCount > 0 && availableCount > 0) {
+        return applyPredictionPresentation({
+          ...basePrediction,
+          level: "可能需要等待",
+          confidence: "低",
+          basis: `${basePrediction.basis} 最近反馈存在冲突，建议谨慎判断。`
+        });
+      }
+
+      // 规则一：5 分钟内至少 2 条 actually_full，直接判为大概率满员。
+      if (fullCount >= 2) {
+        return applyPredictionPresentation({
+          ...basePrediction,
+          level: "大概率满员",
+          confidence: "高",
+          basis: `${basePrediction.basis} 最近多人反馈实际没空位，当前状态可能较紧张。`
+        });
+      }
+
+      // 规则二：5 分钟内 1 条 actually_full，结果至少保持在“可能需要等待”。
+      if (fullCount === 1) {
+        const level = basePrediction.level === "大概率有空位"
+          ? "可能需要等待"
+          : basePrediction.level;
+        return applyPredictionPresentation({
+          ...basePrediction,
+          level,
+          basis: `${basePrediction.basis} 最近有人反馈实际没空位，预测已变得更谨慎。`
+        });
+      }
+
+      // 规则三：5 分钟内有 actually_available，在无冲突时向乐观方向调整一级。
+      if (availableCount >= 1) {
+        let level = basePrediction.level;
+        if (basePrediction.level === "大概率满员") {
+          level = "可能需要等待";
+        } else if (basePrediction.level === "可能需要等待") {
+          level = "大概率有空位";
+        }
+        return applyPredictionPresentation({
+          ...basePrediction,
+          level,
+          basis: `${basePrediction.basis} 最近有人反馈实际有空位，预测已参考最新情况。`
+        });
+      }
+
+      // 规则五：10 分钟内多数反馈为 accurate，且没有实际状态反馈时保持基础预测。
+      if (accurateCount > nonAccurateCount) {
+        return applyPredictionPresentation({
+          ...basePrediction,
+          basis: `${basePrediction.basis} 最近多数用户反馈预测准确，当前预测保持不变。`
+        });
+      }
+
+      return applyPredictionPresentation({
+        ...basePrediction,
+        basis: `${basePrediction.basis} 最近共享反馈暂未触发修正规则，当前预测保持不变。`
+      });
+    }
+
+    // 计算当前完整预测：先算历史数据基础结果，再用最近反馈修正。
+    function calculateCurrentPrediction(currentInfo, records = feedbackRecords) {
+      const matchedHistory = getMatchedHistoryData(currentInfo);
+      const basePrediction = calculateBasePrediction(matchedHistory);
+      return adjustPredictionByRemoteFeedback(basePrediction, records, currentInfo.now);
+    }
+
+    // 渲染当前时间、工作日和厕所名称。
+    function renderCurrentInfo(currentInfo) {
+      document.getElementById("currentTime").textContent = currentInfo.time;
+      document.getElementById("currentWeekday").textContent = currentInfo.weekday;
+      document.getElementById("toiletName").textContent = getFullToiletName();
+
+      const environmentBadge = document.getElementById("environmentBadge");
+      environmentBadge.hidden = toiletConfig.environment !== "test";
+      document.body.dataset.environment = toiletConfig.environment;
+    }
+
+    // 渲染预测结果和对应的视觉状态。
+    function renderPrediction(prediction) {
+      const card = document.getElementById("predictionCard");
+      card.dataset.state = prediction.state;
+      document.getElementById("predictionTitle").textContent = prediction.level;
+      document.getElementById("predictionSuggestion").textContent = prediction.suggestion;
+      document.getElementById("waitingTime").textContent = prediction.waitingTime;
+      document.getElementById("confidence").textContent = prediction.confidence;
+      document.getElementById("predictionBasis").textContent = prediction.basis;
+    }
+
+    function setConnectionStatus(message, state = "warning") {
+      const status = document.getElementById("connectionStatus");
+      status.textContent = message;
+      status.dataset.state = state;
+    }
+
+    // 所有反馈内容都用 textContent 写入，避免异常文字影响页面。
+    function renderRecentFeedback(records = feedbackRecords) {
+      const container = document.getElementById("recentFeedbackContainer");
+      const displayRecords = records.slice(0, predictionConfig.maxRecentFeedbackCount);
+      container.replaceChildren();
+
+      if (displayRecords.length === 0) {
+        const emptyState = document.createElement("p");
+        emptyState.className = "empty-state";
+        emptyState.textContent = "暂无共享反馈";
+        container.appendChild(emptyState);
+        return;
+      }
+
+      const list = document.createElement("ul");
+      list.className = "recent-list";
+
+      displayRecords.forEach(record => {
+        const item = document.createElement("li");
+        item.className = "recent-item";
+
+        const time = document.createElement("span");
+        time.className = "recent-time";
+        time.textContent = typeof record.time === "string" ? record.time : "--:--";
+
+        const feedbackWrapper = document.createElement("span");
+        const feedback = document.createElement("span");
+        feedback.className = "recent-feedback";
+        feedback.textContent = FEEDBACK_LABELS[record.feedback] || "未知反馈";
+
+        const source = document.createElement("small");
+        source.className = "feedback-source";
+        source.textContent = record.storage === "remote"
+          ? "共享反馈"
+          : record.storage === "pending"
+            ? "本地暂存反馈"
+            : "本地缓存反馈";
+
+        feedbackWrapper.append(feedback, source);
+        item.append(time, feedbackWrapper);
+        list.appendChild(item);
+      });
+
+      container.appendChild(list);
+    }
+
+    // 显示短暂的页面提示。
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    function setFeedbackButtonsLoading(loading, activeFeedback = "") {
+      isSubmitting = loading;
+      document.querySelectorAll("[data-feedback]").forEach(button => {
+        if (!button.dataset.originalLabel) {
+          button.dataset.originalLabel = button.textContent;
+        }
+        button.disabled = loading;
+        button.setAttribute("aria-busy", String(loading));
+        button.textContent = loading && button.dataset.feedback === activeFeedback
+          ? "提交中…"
+          : button.dataset.originalLabel;
+      });
+    }
+
+    function getLastSubmitAt() {
+      try {
+        const savedValue = Number(localStorage.getItem(getScopedStorageKey(STORAGE_KEYS.lastSubmitAt)));
+        return Math.max(lastSubmitAtMemory, Number.isFinite(savedValue) ? savedValue : 0);
+      } catch (error) {
+        return lastSubmitAtMemory;
+      }
+    }
+
+    function rememberSubmitTime(timestamp) {
+      lastSubmitAtMemory = timestamp;
+      try {
+        localStorage.setItem(getScopedStorageKey(STORAGE_KEYS.lastSubmitAt), String(timestamp));
+      } catch (error) {
+        console.warn("无法保存防重复提交时间：", error);
+      }
+    }
+
+    function isConnectionStructureError(error) {
+      const details = `${error && error.message ? error.message : ""} ${error && error.details ? error.details : ""}`;
+      return [401, 403, 404].includes(error && error.status)
+        || /relation|permission|row-level security|policy|schema cache/i.test(details);
+    }
+
+    async function loadHistoricalObservations() {
+      if (!supabaseClient) {
+        historyRecords = fallbackHistoryData;
+        historyMode = "fallback";
+        return;
+      }
+
+      try {
+        const remoteObservations = await fetchRemoteObservations();
+        if (remoteObservations.length > 0) {
+          historyRecords = remoteObservations;
+          historyMode = "remote";
+        } else {
+          historyRecords = fallbackHistoryData;
+          historyMode = "fallback";
+          console.info("当前环境暂无 Supabase 历史观测数据，已使用本地兜底数据。");
+        }
+      } catch (error) {
+        console.error("读取 Supabase 历史观测数据失败，已使用本地兜底：", error);
+        historyRecords = fallbackHistoryData;
+        historyMode = "fallback";
+      }
+    }
+
+    async function loadFeedbackFromSupabase() {
+      if (!supabaseClient) {
+        feedbackMode = "local";
+        feedbackRecords = getFallbackFeedback();
+        setConnectionStatus("尚未配置共享数据源，当前使用本地模式", "warning");
+        return;
+      }
+
+      try {
+        const remoteRecords = await fetchRemoteFeedback();
+        cacheFeedback(remoteRecords);
+        feedbackMode = "shared";
+        feedbackRecords = mergeFeedbackRecords(getLocalFallbackFeedback(), remoteRecords);
+        setConnectionStatus("共享反馈已连接", "success");
+      } catch (error) {
+        console.error("读取 Supabase 共享反馈失败：", error);
+        feedbackMode = "cache";
+        feedbackRecords = getFallbackFeedback();
+        setConnectionStatus(
+          isConnectionStructureError(error)
+            ? "共享反馈连接异常，请检查 Supabase 表结构或权限配置"
+            : "共享反馈暂时加载失败，当前使用本地预测结果",
+          "warning"
+        );
+      }
+    }
+
+    // 处理用户点击反馈：写入 Supabase；失败时保存到 localStorage。
+    async function handleFeedbackClick(feedbackValue) {
+      if (isSubmitting || !FEEDBACK_LABELS[feedbackValue]) {
+        return;
+      }
+
+      const nowTimestamp = Date.now();
+      const cooldownMilliseconds = predictionConfig.duplicateSubmitCooldownSeconds * 1000;
+      if (nowTimestamp - getLastSubmitAt() < cooldownMilliseconds) {
+        showToast("刚刚已经记录过啦，稍等一下再反馈");
+        return;
+      }
+
+      rememberSubmitTime(nowTimestamp);
+      const currentInfo = getCurrentTimeInfo();
+      const record = normalizeFeedbackRecord({
+        createdAt: currentInfo.now.toISOString(),
+        environment: toiletConfig.environment,
+        toiletId: toiletConfig.id,
+        toiletName: getFullToiletName(),
+        weekday: currentInfo.weekday,
+        time: currentInfo.time,
+        prediction: currentPrediction ? currentPrediction.level : "可能需要等待",
+        feedback: feedbackValue,
+        source: "web_v1",
+        clientId: getOrCreateClientId()
+      }, "pending");
+
+      setFeedbackButtonsLoading(true, feedbackValue);
+
+      try {
+        if (!supabaseClient) {
+          saveLocalFallbackFeedback(record);
+          feedbackMode = "local";
+          feedbackRecords = mergeFeedbackRecords(record, getFallbackFeedback());
+          setConnectionStatus("尚未配置共享数据源，当前使用本地模式", "warning");
+          showToast("尚未配置共享数据源，反馈已暂存到本地");
+        } else {
+          const submittedRecord = await submitRemoteFeedback(record);
+
+          try {
+            const remoteRecords = await fetchRemoteFeedback();
+            cacheFeedback(remoteRecords);
+            feedbackMode = "shared";
+            feedbackRecords = mergeFeedbackRecords(getLocalFallbackFeedback(), remoteRecords);
+            setConnectionStatus("共享反馈已连接", "success");
+            showToast("反馈已提交");
+          } catch (refreshError) {
+            console.error("反馈已提交，但刷新共享列表失败：", refreshError);
+            feedbackMode = "cache";
+            feedbackRecords = mergeFeedbackRecords(submittedRecord, getFallbackFeedback());
+            cacheFeedback(feedbackRecords.filter(item => item.storage === "remote"));
+            setConnectionStatus("共享反馈暂时加载失败，当前使用本地预测结果", "warning");
+            showToast("反馈已提交，共享列表暂时加载失败");
+          }
+        }
+      } catch (error) {
+        console.error("提交 Supabase 共享反馈失败：", error);
+        const saved = saveLocalFallbackFeedback(record);
+        feedbackMode = "local";
+        feedbackRecords = mergeFeedbackRecords(record, getFallbackFeedback());
+        setConnectionStatus(
+          isConnectionStructureError(error)
+            ? "共享反馈连接异常，请检查 Supabase 表结构或权限配置"
+            : "共享反馈暂时加载失败，当前使用本地预测结果",
+          "warning"
+        );
+        showToast(saved
+          ? "共享反馈提交失败，已暂存到本地"
+          : "共享反馈提交失败，本地暂存也未成功");
+      } finally {
+        const latestInfo = getCurrentTimeInfo();
+        renderCurrentInfo(latestInfo);
+        currentPrediction = calculateCurrentPrediction(latestInfo, feedbackRecords);
+        renderPrediction(currentPrediction);
+        renderRecentFeedback(feedbackRecords);
+        setFeedbackButtonsLoading(false);
+      }
+    }
+
+    // 页面首次打开时的完整流程。
+    async function initPage() {
+      const currentInfo = getCurrentTimeInfo();
+      renderCurrentInfo(currentInfo);
+      historyRecords = fallbackHistoryData;
+      historyMode = "fallback";
+      feedbackRecords = getFallbackFeedback();
+      currentPrediction = calculateCurrentPrediction(currentInfo, feedbackRecords);
+      renderPrediction(currentPrediction);
+      renderRecentFeedback(feedbackRecords);
+
+      document.querySelectorAll("[data-feedback]").forEach(button => {
+        button.addEventListener("click", () => handleFeedbackClick(button.dataset.feedback));
+      });
+
+      supabaseClient = initSupabaseClient();
+      await Promise.all([
+        loadHistoricalObservations(),
+        loadFeedbackFromSupabase()
+      ]);
+
+      const latestInfo = getCurrentTimeInfo();
+      renderCurrentInfo(latestInfo);
+      currentPrediction = calculateCurrentPrediction(latestInfo, feedbackRecords);
+      renderPrediction(currentPrediction);
+      renderRecentFeedback(feedbackRecords);
+    }
+
+    initPage().catch(error => {
+      console.error("页面初始化失败，已切换到本地兜底：", error);
+      historyRecords = fallbackHistoryData;
+      historyMode = "fallback";
+      feedbackRecords = getFallbackFeedback();
+      const currentInfo = getCurrentTimeInfo();
+      renderCurrentInfo(currentInfo);
+      currentPrediction = calculateCurrentPrediction(currentInfo, feedbackRecords);
+      renderPrediction(currentPrediction);
+      renderRecentFeedback(feedbackRecords);
+      setConnectionStatus("共享反馈暂时加载失败，当前使用本地预测结果", "warning");
+    });
+  </script>
+</body>
+</html>
